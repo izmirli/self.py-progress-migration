@@ -53,11 +53,12 @@ def goto_exercise(cycle: str, chapter: str, exercise: str):
 
 def submit_answers(exercise: str):
     submit_buttons = driver.find_elements_by_xpath(
-        '//div[@class="problem"]//button[@data-value="הגשה"]'
+        '//div[@class="problem"]//button[@data-value="הגשה" '
+        'and @disabled!="disabled"]'
     )
-    for but in submit_buttons:
+    for i, but in enumerate(submit_buttons):
         but.click()
-    logging.info(f'Submitted Ex {exercise}')
+        logging.info(f'Submitted Ex {exercise} (sub#{i})')
 
 
 def get_chapter(exercise: str) -> str:
@@ -107,6 +108,8 @@ def import_text_answers(exercise: str):
         '//div[@class="problem"]//input[@type="text"]'
     )
     answers = [answer.get_attribute("value") for answer in problem_inputs]
+    if max(answers, key=len) == 0:  # no input to import
+        return
     goto_exercise(config['new_cycle'], chapter, exercise)
     for i, answer in enumerate(answers, 1):
         cur_input = driver.find_element_by_xpath(
@@ -132,6 +135,8 @@ def migrate_progression():
     import_text_answers("3.3.2")
     import_text_answers("3.4.1")
     import_text_answers("3.4.4")
+    import_select_answers("4.1.1")
+    import_text_answers("4.2.1")
 
 
 def read_config():
