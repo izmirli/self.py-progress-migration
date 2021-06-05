@@ -1,4 +1,29 @@
-"""Self.Py Progress Migration (SPPM)
+"""Self.Py Progress Migration (SPPM).
+
+The self.py course has a half-year cycle (summer/winter). At the end of
+a cycle, the old course will be archived (viewable, but no longer
+active) and a new course will be opened.
+
+Participants of the old cycle course may continue on new cycle course,
+but they need to manually re-answer, or copy, all closed-exercises they
+done in ols cycle to the new one.
+
+Using selenium (with Chrome driver) we'll migrate self.py course's
+progress (the closed-exercises answers) from old cycle to the new one.
+
+
+Before using do/check these:
+    1. Install selenium package. Can be done by this command:
+    `pip install -U selenium`
+
+    2. Install WebDriver for Chrome from:
+    https://sites.google.com/a/chromium.org/chromedriver/downloads
+    And add its location to system's path. Read more about it here:
+    https://www.selenium.dev/documentation/en/webdriver/driver_requirements/
+
+    3. Your Campus IL login's email/password should be in conf.ini file
+    at same directory as this file.
+    You can copy (or move) conf.ini.sample to conf.ini and edit it.
 
 """
 from selenium.webdriver import Chrome
@@ -6,7 +31,6 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support.ui import Select
 from configparser import ConfigParser
-import time
 import logging
 
 BASE_URL = 'https://courses.campus.gov.il/'
@@ -26,6 +50,7 @@ def campus_il_login():
     password_in = driver.find_element_by_id("login-password")
     password_in.send_keys(config['pass'])
     password_in.send_keys(Keys.RETURN)
+    logging.debug('Login should have been submitted')
     WebDriverWait(driver, LONG_WAIT).until(lambda d: 'לוח בקרה' in d.title)
     logging.debug(f'login done? page_title is: {driver.title}')
     logging.info('Logged in to Campus IL')
@@ -54,7 +79,7 @@ def goto_exercise(cycle: str, chapter: str, exercise: str):
 def submit_answers(exercise: str):
     submit_buttons = driver.find_elements_by_xpath(
         '//div[@class="problem"]//button[@data-value="הגשה" '
-        'and @disabled!="disabled"]'
+        'and not(@disabled="disabled")]'
     )
     for i, but in enumerate(submit_buttons):
         but.click()
@@ -101,6 +126,44 @@ def import_radio_answers(exercise: str):
     submit_answers(exercise)
 
 
+def import_checkbox_answers(exercise: str):
+    chapter = get_chapter(exercise)
+    goto_exercise(config['old_cycle'], chapter, exercise)
+    problem_boxes = driver.find_elements_by_xpath(
+        '//div[@class="problem"]//input[@type="checkbox"]'
+    )
+    boxes = [box.is_selected() for box in problem_boxes]
+    goto_exercise(config['new_cycle'], chapter, exercise)
+    for i, answer in enumerate(boxes, 1):
+        if not answer:
+            continue
+        driver.find_element_by_xpath(
+            f'(//div[@class="problem"]//input[@type="checkbox"])[{i}]'
+        ).click()
+        logging.debug(f'checkbox#{i} clicked')
+
+    submit_answers(exercise)
+
+
+def import_clicked_answers(exercise: str, input_type: str):
+    chapter = get_chapter(exercise)
+    goto_exercise(config['old_cycle'], chapter, exercise)
+    problem_inputs = driver.find_elements_by_xpath(
+        f'//div[@class="problem"]//input[@type="{input_type}"]'
+    )
+    inputs = [inp.is_selected() for inp in problem_inputs]
+    goto_exercise(config['new_cycle'], chapter, exercise)
+    for i, answer in enumerate(inputs, 1):
+        if not answer:
+            continue
+        driver.find_element_by_xpath(
+            f'(//div[@class="problem"]//input[@type="{input_type}"])[{i}]'
+        ).click()
+        logging.debug(f'{input_type}#{i} clicked')
+
+    submit_answers(exercise)
+
+
 def import_text_answers(exercise: str):
     chapter = get_chapter(exercise)
     goto_exercise(config['old_cycle'], chapter, exercise)
@@ -123,20 +186,28 @@ def import_text_answers(exercise: str):
 
 
 def migrate_progression():
-    import_text_answers("1.3.1")
-    import_select_answers("2.1.1")
-    import_radio_answers("2.1.2")
-    import_select_answers("2.2.1")
-    import_radio_answers("2.3.1")
-    import_select_answers("2.3.2")
-    import_radio_answers("2.4.1")
-    import_text_answers("3.1.1")
-    import_text_answers("3.3.1")
-    import_text_answers("3.3.2")
-    import_text_answers("3.4.1")
-    import_text_answers("3.4.4")
-    import_select_answers("4.1.1")
-    import_text_answers("4.2.1")
+    exercises = {
+        'text': ["1.3.1", "3.1.1", "3.3.1", "3.3.2", "3.4.1", "3.4.4", "4.2.1"],
+        'select': ["2.1.1", "2.2.1", "2.3.2", "4.1.1", "5.2.1", "5.3.3",
+                   "6.1.1", "6.2.1", "7.1.3", "8.3.1"],
+        'radio': ["2.1.2", "2.3.1", "2.4.1", "7.1.1", "7.1.2", "8.1.1", "9.2.1"],
+        'checkbox': ["5.1.1", "5.3.1", "5.3.2", "6.2.2", "7.2.3"],
+    }
+    for exercise_type in exercises:
+        for exercise in exercises[exercise_type]:
+            logging.debug(f'migrate_progression of {exercise} '
+                          f'(type: {exercise_type})')
+            if len(config['last_exercise']) >= 5 \
+                    and exercise > config['last_exercise']:
+                logging.debug(f'Skipping Ex#{exercise} as after last exercise '
+                              f'to import ({config["last_exercise"]})')
+                continue
+            if exercise_type == 'text':
+                import_text_answers(exercise)
+            elif exercise_type == 'select':
+                import_select_answers(exercise)
+            elif exercise_type in ('radio', 'checkbox'):
+                import_clicked_answers(exercise, exercise_type)
 
 
 def read_config():
@@ -148,11 +219,10 @@ def read_config():
         config['pass'] = cp['LOGIN']['PASSWD']
         config['old_cycle'] = cp['CYCLES']['OLD']
         config['new_cycle'] = cp['CYCLES']['NEW']
+        config['last_exercise'] = cp['EXERCISES']['LAST']
     except Exception as ex:
         logging.fatal(f'Missing or invalid conf.ini data - {ex.__repr__()}')
         raise SystemExit
-
-    # logging.debug(f'config {config}')
 
 
 def main():
@@ -162,8 +232,6 @@ def main():
     driver.maximize_window()
     campus_il_login()
     migrate_progression()
-
-    time.sleep(15)
     driver.quit()
 
 

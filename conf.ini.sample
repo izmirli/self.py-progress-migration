@@ -1,0 +1,13 @@
+# Campus IL login
+[LOGIN]
+EMAIL=your_email@gmail.com
+PASSWD=your_password
+
+# Cycle url-string
+[CYCLES]
+OLD=1_2021
+NEW=2021_2
+
+# The last exercises to migrate (can be left empty)
+[EXERCISES]
+LAST=
