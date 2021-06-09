@@ -33,6 +33,7 @@ from selenium.webdriver import Chrome
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions
 
 __version__ = "1.1"
 
@@ -79,7 +80,9 @@ def campus_il_login():
     password_in.send_keys(config['pass'])
     password_in.send_keys(Keys.RETURN)
     logging.debug('Login should have been submitted')
-    WebDriverWait(driver, PAGE_LOAD_WAIT).until(lambda d: 'לוח בקרה' in d.title)
+    # driver.find_element_by_xpath('//div[@class="js-form-feedback"]/div[contains(@class, "submission-error")]')
+    WebDriverWait(driver, PAGE_LOAD_WAIT).until(expected_conditions.title_contains('לוח בקרה'))
+    # WebDriverWait(driver, PAGE_LOAD_WAIT).until(lambda d: 'לוח בקרה' in d.title)
     logging.debug(f'login done? title is: {driver.title}')
     logging.info('Logged in to Campus IL')
 
