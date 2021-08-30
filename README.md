@@ -1,39 +1,46 @@
 # Self.Py Progress Migration (SPPM)
 
 ## Intro
-The [self.py course](https://campus.gov.il/course/course-v1-cs-gov_cs_selfpy101/), a beginners Python <abbr title="Massive Open Online Course">MOOC</abbr> at [Campus IL](https://campus.gov.i), has a half-year cycle (summer/winter). At the end of
-a cycle, the old course is archived (viewable, but no longer
-active) and a new course will be opened.
+The [self.py course](https://campus.gov.il/course/course-v1-cs-gov_cs_selfpy101/), 
+a beginners Python <abbr title="Massive Open Online Course">MOOC</abbr> at 
+[Campus IL](https://campus.gov.i), has a half-year cycle (summer/winter). At the
+end of a cycle, the old course is archived (viewable, but no longer active) and 
+a new course is opened.
 
-Participants of the old cycle course may continue on new cycle course,
-but they need to manually re-answer, or copy, all closed-exercises they've done in old cycle to the new one. As there are 29 exercises (that may have one or more questions) manually coping them might take a lot of time.
+Participants of the old cycle may continue on new cycle, but they need to 
+manually re-answer, or copy, all their submitted exercises from old cycle 
+to the new one (29 exercise pages).
 
-I do recommend re-answering as a way of strengthening the knowledge learned so far. Yet, if one is going to just manually copy his old answers, it might be a boring and time-consuming chore.
+I do recommend re-answering as a way of strengthening the knowledge learned so 
+far. Yet, if one is going to just manually copy his old answers, it might be a 
+boring and time-consuming chore.
 
 ## What this script do?
-Using selenium (with Chrome driver) it migrates self.py course's
-progress from old cycle to the new one automatically. Using participants account, it goes over each closed-exercise, copy the old answers, insert and submit them at new cycle course pages. 
+Using selenium (with Chrome driver) it automatically migrates self.py course's
+progress from old cycle to the new one. Using participants account, it goes 
+over each closed-exercise, copy the old answers, insert and submit them at new 
+cycle course pages. 
 
 ## Usage
 ### Pre-requests:
  1. Python version 3.8+
- 1. Install selenium package. Can be done with this command:
+ 2. Install selenium package. Can be done with this command:
     `pip install -U selenium`
- 1. Install **WebDriver for Chrome** (from: https://sites.google.com/chromium.org/driver/downloads) and add its location to system's path ([read more about it here](https://www.selenium.dev/documentation/en/webdriver/driver_requirements/)).
- 1. Your Campus IL login's email/password should be in **_conf.ini_** file
-    at same directory as this file.
-    Copy (or move) _**conf.ini.sample**_ to _**conf.ini**_ and edit it - this is the section to edit:
-```buildoutcfg
-[LOGIN]
-EMAIL=your_email@gmail.com
-PASSWD=your_password
-```
+ 3. Install **WebDriver for Chrome** (from: 
+https://sites.google.com/chromium.org/driver/downloads) and add its location to 
+system's path ([read more about it here](https://www.selenium.dev/documentation/en/webdriver/driver_requirements/)).
+ 4. Make sure you have _**conf.ini**_ (or _**conf.ini.sample**_) file in same 
+directory as `sppm.py` file.
 
-### Command 
-To run the script use this command:
+### Running script 
+From your command prompt (cmd) use this command:
 `python sppm.py`
 
-After a few seconds you should see a new window of Google Chrome browser opens. Don't touch it and let the automation run. Expected automation run-time is 5-10 minutes.
+You will be prompted for your Campus IL login's email/password (unless already 
+set in conf.ini file).
+
+After a few seconds you should see a new window of Google Chrome browser opens. 
+Don't touch it and let the automation run. Expected automation run-time is 5-10 minutes.
 
 ### Customisation
 #### Limit exercises to migrate

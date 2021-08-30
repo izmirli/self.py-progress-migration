@@ -1,12 +1,12 @@
 """Self.Py Progress Migration (SPPM)
 
 The self.py course has a half-year cycle (summer/winter). At the end of
-a cycle, the old course will be archived (viewable, but no longer
-active) and a new course will be opened.
+a cycle, old course is archived (viewable, but no longer active) and a
+new course is opened.
 
 Participants of the old cycle course may continue on new cycle course,
-but they need to manually re-answer, or copy, all closed-exercises they
-done in old cycle to the new one (29 exercises).
+but they need to manually re-answer, or copy, all their submitted
+exercises from old cycle to the new one (29 exercises).
 
 Using selenium (with Chrome driver) we'll migrate self.py course's
 progress from old cycle to the new one automatically.
@@ -21,20 +21,26 @@ Before using do/check these:
     And add its location to system's path. Read more about it here:
     https://www.selenium.dev/documentation/en/webdriver/driver_requirements/
 
-    3. Your Campus IL login's email/password should be in conf.ini file
-    at same directory as this file.
-    You can copy (or move) conf.ini.sample to conf.ini and edit it.
+    3. Copy (or rename/move) conf.ini.sample to conf.ini (at the same
+    directory as this file).
+    [Optional] If you don't want to be prompted for your Campus IL login's
+    email/password, you can edit conf.ini to add them there.
 """
 import logging
 import os
+import re
+import time
 from configparser import ConfigParser
 
 from selenium.webdriver import Chrome
+from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions
 
-__version__ = "1.1"
+__version__ = "1.2"
 
 BASE_URL = 'https://courses.campus.gov.il/'
 PAGE_LOAD_WAIT = 3
@@ -49,13 +55,24 @@ done_exs = 0
 
 def main():
     initialize()
-    campus_il_login()
+    login_tries = 0
+    while not campus_il_login():
+        login_tries += 1
+        logging.warning(f"Failed to login to Campus IL (attempt#{login_tries}).")
+        if login_tries >= 3:
+            logging.fatal("Too many failed login attempts. Exiting.")
+            raise SystemExit(401)
+        time.sleep(0.1)
+        driver.minimize_window()
+        check_or_get_campus_il_auth(True)
+        driver.maximize_window()
     migrate_progression()
+    logging.info('Gr8 Success!')
     driver.quit()
 
 
 def initialize():
-    """Initialize this script.
+    """Initialize this script, getting all needed for auto migration.
 
     1. Set logging config.
     2. Read and set this script's config.
@@ -67,21 +84,71 @@ def initialize():
         format='[%(asctime)s] [%(levelname)s] %(message)s', level=LOG_LEVEL
     )
     read_config()
+    time.sleep(0.1)
+    check_or_get_campus_il_auth()
     driver = Chrome()
     driver.maximize_window()
 
 
-def campus_il_login():
-    """Login to Campus IL website."""
+def check_or_get_campus_il_auth(new_input: bool = False) -> None:
+    """Validate, and get if needed, user's email/password.
+
+    :param new_input: force new input even if current validates.
+    :return: None
+    """
+    email, passwd = ('', '') if new_input else (config['email'], config['pass'])
+
+    loop_count = 0
+    while email == '' or passwd == '' or email == 'your_email@gmail.com' \
+            or not re.search(r'^[\w.+-]+@[\w.-]+\.[a-z]{2,10}$', email,
+                             re.IGNORECASE):
+        loop_count += 1
+        if loop_count >= 5:
+            print('\nToo many failed attempts. Exiting.')
+            raise SystemExit()
+        if new_input:
+            print(f"\nMissing or invalid Email/Password (e: {config['email']}, "
+                  f"pw: {'*' * len(config['pass'])})")
+        email = input('Your Campus IL Email: ')
+        passwd = input('Your Campus IL Password: ')
+
+    config['email'], config['pass'] = email, passwd
+
+
+def campus_il_login() -> bool:
+    """Login to Campus IL website.
+
+    :return: True if login successful, False otherwise.
+    """
     driver.get(BASE_URL + 'login')
     driver.find_element_by_id("login-email").send_keys(config['email'])
     password_in = driver.find_element_by_id("login-password")
     password_in.send_keys(config['pass'])
     password_in.send_keys(Keys.RETURN)
     logging.debug('Login should have been submitted')
-    WebDriverWait(driver, PAGE_LOAD_WAIT).until(lambda d: 'לוח בקרה' in d.title)
-    logging.debug(f'login done? title is: {driver.title}')
+
+    try:
+        driver.implicitly_wait(2)
+        error_msg = driver.find_element_by_xpath(
+            '//div[@class="js-form-feedback"]'
+            '/div[contains(@class, "submission-error")]'
+        )
+        logging.info(f"Found error_msg: {error_msg.text}")
+        if error_msg:
+            return False
+    except (NoSuchElementException, TimeoutException) as ex:
+        logging.debug(f"Looking for submission-error exception: [{ex}] {str(ex)}")
+        pass  # no error message found in page, so continue
+
+    try:
+        WebDriverWait(driver, PAGE_LOAD_WAIT).until(expected_conditions.title_contains('לוח בקרה'))
+        # WebDriverWait(driver, PAGE_LOAD_WAIT).until(lambda d: 'לוח בקרה' in d.title)
+    except (NoSuchElementException, TimeoutException) as ex:
+        logging.info(f"Didn't get to control panel page")
+        return False
+
     logging.info('Logged in to Campus IL')
+    return True
 
 
 def migrate_progression():
@@ -231,19 +298,41 @@ def get_chapter(exercise: str) -> str:
     return exercise[:-2]
 
 
+def get_ini_file_or_exit() -> str:
+    """Check ini-file existence and return path to it. Exit if fail.
+
+    Expected path is same directory as this file + 'conf.ini'
+    If missing, look for 'conf.ini.sample' and rename it.
+
+    :raises SystemExit: if expected ini-file can not be used
+    :return: path to ini-file
+    """
+    ini_expected_path = os.path.join(
+        os.path.abspath(os.path.dirname(__file__)), 'conf.ini.sample'
+    )
+    if os.path.isfile(ini_expected_path):
+        return ini_expected_path
+
+    sample_path = os.path.join(
+        os.path.abspath(os.path.dirname(__file__)), 'conf.ini.sample'
+    )
+    if os.path.isfile(sample_path):
+        os.rename(sample_path, ini_expected_path)
+        return ini_expected_path
+
+    logging.fatal('Configuration file (conf.ini) is missing '
+                  '(should be in same directory as sppm.py).')
+    raise SystemExit
+
+
 def read_config():
     """Read and set configuration values from conf.ini file.
 
     Mast have all expected values, or script will exit.
     """
     global config, total_exs
-    conf_path = os.path.join(
-        os.path.abspath(os.path.dirname(__file__)), 'conf.ini'
-    )
-    if not os.path.isfile(conf_path):
-        logging.fatal(f'Configuration file (conf.ini) is missing '
-                      f'(should be in same directory as sppm.py).')
-        raise SystemExit
+
+    conf_path = get_ini_file_or_exit()
     cp = ConfigParser()
     try:
         cp.read(conf_path)
@@ -259,18 +348,18 @@ def read_config():
             ]
             for ex_type in ('TEXT', 'SELECT', 'RADIO', 'CHECKBOX')
         }
-        total_exs = sum([
-            len([
-                li for li in cur_list
-                if len(config['last_exercise']) < 5 or li <= config[
-                    'last_exercise']
-            ]) for cur_list in config['exercises'].values()
-        ])
-        logging.info(f'Got {total_exs} exercise pages to migrate.')
-
     except Exception as ex:
         logging.fatal(f'Missing or invalid conf.ini data - {ex.__repr__()}')
         raise SystemExit
+
+    total_exs = sum([
+        len([
+            li for li in cur_list
+            if len(config['last_exercise']) < 5 or li <= config[
+                'last_exercise']
+        ]) for cur_list in config['exercises'].values()
+    ])
+    logging.info(f'Got {total_exs} exercise pages to migrate.')
 
 
 if __name__ == '__main__':
